@@ -1,0 +1,72 @@
+function pickROIs_iterative(study, subjectlist, task, contrast, thresholds)
+%created by AES 7/16/13
+%READ THIS SCRIPT BEFORE YOUR RUN IT. must set ROIs and roistringlim
+%e.g. pickROIs_iterative('FSF2',makeIDs('FSF2', [1:17,19]),'FSFsploc',3, [.001, .01, .05])
+% runs automized roi picking on subjects in subjectlist, repeating at more lenient threshold for subjects that lack the ROI
+% at more conservative thresholds.
+% run this and autoROI_picker in general using NX because it crashes VNC
+% (WTF?!)
+%note, study needs to have a folder title ROI
+rootdir=['/mindhive/saxelab2/' study '/']
+autoROIdir=[rootdir 'autoROI_jobs']
+roistringlim=9; %12 %how much of roi string to look at
+%these are some rois I like to pick
+if strcmp(task,'tomloc')
+%roihome={'/mindhive/saxelab/roi_library/functional/462_subs/'};
+%ROISind={'RTPJ'};
+roihome={'/mindhive/saxelab/roi_library/functional/462_subs/','/mindhive/saxelab/roi_library/functional/462_subs/','/mindhive/saxelab/roi_library/functional/EIBrois/','/mindhive/saxelab/roi_library/functional/EIBrois/','/mindhive/saxelab/roi_library/functional/462_subs/', '/mindhive/saxelab/roi_library/functional/462_subs/', '/mindhive/saxelab/roi_library/functional/462_subs/', '/mindhive/saxelab/roi_library/functional/462_subs/'}
+ROISind={'RTPJ','LTPJ','RSTS','LSTS','PC', 'MMPFC', 'DMPFC', 'VMPFC'};
+roistringlim=2;
+else if strcmp(task,'EmoBioLoc')
+        if contrast==8
+roihome={'/mindhive/saxelab/roi_library/functional/EIBrois/', '/mindhive/saxelab/roi_library/functional/EIBrois/','/mindhive/saxelab/roi_library/functional/EIBrois/','/mindhive/saxelab/roi_library/functional/EIBrois/','/mindhive/saxelab/roi_library/functional/EIBrois/','/mindhive/saxelab/roi_library/functional/EIBrois/'}
+ROISind={'ROI_rFFA_kanparcel_EmoBioLoc','ROI_lFFA_kanparcel_EmoBioLoc', 'ROI_rSTS_kanparcel_EmoBioLoc', 'ROI_lSTS_kanparcel_EmoBioLoc', 'ROI_rOFA_kanparcel_EmoBioLoc', 'ROI_lOFA_kanparcel_EmoBioLoc'};
+        else if contrast==10
+roihome={'/mindhive/saxelab/roi_library/functional/EIBrois/'};
+ROISind={'ROI_rpSTS_BDbiomot'}
+            end
+        end
+roistringlim=12;
+else if strcmp(task,'FSFsploc')
+roihome={'/mindhive/saxelab/roi_library/functional/EIBrois/', '/mindhive/saxelab/roi_library/functional/EIBrois/','/mindhive/saxelab/roi_library/functional/EIBrois/','/mindhive/saxelab/roi_library/functional/EIBrois/','/mindhive/saxelab/roi_library/functional/EIBrois/','/mindhive/saxelab/roi_library/functional/EIBrois/'}
+ROISind={'ROI_rFFA_kanparcel_FSFsploc','ROI_lFFA_kanparcel_FSFsploc', 'ROI_rSTS_kanparcel_FSFsploc', 'ROI_lSTS_kanparcel_FSFsploc', 'ROI_rOFA_kanparcel_FSFsploc', 'ROI_lOFA_kanparcel_FSFsploc'};
+%roihome={'/mindhive/saxelab/roi_library/functional/EIBrois/'};
+%ROISind={'ROI_rpSTS_BDbiomot'}
+roistringlim=12;
+    end
+end
+end
+autoROI_picker_old(study,subjectlist,task,contrast,{'p_val_thresh', thresholds(1),'render', 0}) %run it one time to create the ROIs at most conservative
+%threshold
+for t=2:length(thresholds)
+    
+for r=1:length(ROISind)
+    roi=ROISind{r}
+    selectedroi=dir([roihome{r}, roi(1:roistringlim) '*.mat'])
+    selectedroi=[roihome{r}, selectedroi.name]
+    hasitcount=0;
+    hasit={};
+    doesnothaveitcount=0;
+    doesnothaveit={};
+for s=1:length(subjectlist)
+   subject=subjectlist{s};
+   subjectROIdir=[rootdir, subject '/autoROI/'];
+   list=dir([subjectROIdir, roi '*']);
+   if size(list,1)>0
+       hasitcount=hasitcount+1;
+       hasit{hasitcount}=subject;
+   else
+       doesnothaveitcount=doesnothaveitcount+1;
+       doesnothaveit{doesnothaveitcount}=subject;
+   end
+end
+doesnothaveit
+if length(doesnothaveit)>0
+autoROI_picker_AES(study,doesnothaveit,task,contrast,selectedroi,{'p_val_thresh',thresholds(t),'render', 0}) %run it again on reduced subjectlist
+end
+
+end
+end
+
+
+end

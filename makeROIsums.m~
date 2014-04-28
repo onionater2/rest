@@ -1,0 +1,14 @@
+function str= makeROIsums(report)
+for x=1:14
+roi=report(x).name;
+numvox=report(x).numvoxels;
+meannumvox=nanmean(numvox(1:16,:));
+stdnumvox=nanstd(numvox(1:16,:))
+peakT=report(x).peakT;
+peakT=peakT(1:16,:);
+peakXYZ=report(x).peakXYZ;
+peakXYZ=peakXYZ(1:16,:);
+str{x} = sprintf('roi :%s, %%.2f voxels, %.2f std',roi,meannumvox, stdnumvox)
+    
+%strings{x}=[roi, ': ', num2str(nanmean(numvox)), ' voxels, peak T=' num2str(nanmean(peakT)), ', ', num2str(nanmean(peakXYZ(:,1))), ',', num2str(nanmean(peakXYZ(:,2))), ',' num2str(nanmean(peakXYZ(:,3)))];
+end

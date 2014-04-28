@@ -1,0 +1,58 @@
+function saxelab_add_regressor_AES(study,subjectlist,task,filekey,varargin)
+%e.g.
+%saxelab_add_regressor_AES('FSF',makeIDs('FSF',[1])),'FSF_main','FSFuserregs')
+%edited by AES 12/5/13
+% saxelab_add_regressor(study,subjID,task,runs)
+% This function loads data from a .mat file  and makes it into regressors.
+%
+add_aes_regressors=0
+destroy_spm_inputs=1
+add_param_modulator=0;
+%% Load and modify behavioral .mat files 
+EXPERIMENT_ROOT_DIR = '/mindhive/saxelab2';
+cd(fullfile(EXPERIMENT_ROOT_DIR,study,'behavioural'));
+
+for subj=1:length(subjectlist)
+    subject=subjectlist{subj}
+    runlist=listbolds(task, {subject}, 'FSF');
+    runlist=runlist{1}
+    file_list=dir(sprintf('%s.%s.*',subject,task));
+    num_runs = length(file_list);
+    if num_runs~=length(runlist)
+        disp('warning: specified runs do not match number of behavioral files');
+    end
+for ii = 1:num_runs
+    thisbold = runlist(ii);
+    cd(fullfile(EXPERIMENT_ROOT_DIR,study,subject,sprintf('bold/0%.2d',thisbold)));
+    reg_file = dir([filekey '*.mat']); 
+    load(reg_file.name);%%contains structure with name and reg fields
+    cd(fullfile(EXPERIMENT_ROOT_DIR,study,'behavioural'));
+    load(file_list(ii).name);
+    clear aes_regressors;
+    for r=1:size(reg_data,2)
+        regressorname=reg_data(r).name;
+        regressor=reg_data(r).reg;
+    rgrsr_length = length(regressor);
+    if rgrsr_length ~= ips
+        disp('warning: Number of Regressor rows does not match');
+        fprintf('the ips found in task %s for subject %s\n',task,subject);
+        cont = 'empty';
+        while isempty(strfind('yn',cont))
+            cont = input('Continue? (y/n): ','s');
+        end
+        if cont=='n'
+            disp('aborting...');
+            return
+        end
+    end
+    % add each regressor as continuous regressor
+    aes_regressors(r).name = regressorname;
+    aes_regressors(r).value = regressor;
+    end
+
+    save(file_list(ii).name,'-append','aes_regressors');
+    fprintf('"aes_regressors" variable appended to file %s\n',file_list(ii).name);
+end
+clear all;
+end
+end

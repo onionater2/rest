@@ -1,0 +1,78 @@
+function [output, oldminusnewarray, newminusoldarray, newminusoldratioarray, oldminusnewratioarray, avgratioarray] =oldnewROIsoverlap(oldname, newname, subjectlist)
+% tests for degree of overlap between old and new ROIs
+root='/mindhive/saxelab2/EIB/'
+gotimages=0
+numsubj=length(subjectlist);
+newminusold_all=zeros(numsubj,1);
+newminusoldarray=[];
+newminusoldratioarray=[];
+oldminusnew_all=zeros(numsubj,1);
+oldminusnewarray=[];
+oldminusnewratioarray=[];
+avgratioarray=[];
+for s=1:numsubj
+roicount=0;
+oldminusnewratio=0;
+newminusoldratio=0;
+for i=1:size(images,1)
+try
+p1=images(i,:);
+subject=subjectlist{s};
+mainroot=[root,subject,'/',oldname,'/'];
+if gotimages==0
+images=spm_select(inf, 'image', 'pick rois to compare', '', pwd, '.*', 1); %% not sure why you need this special filter instead of swrf*.img, but you do
+end
+newroot=[root,subject,'/',newname,'/'];
+roiname=p1(length(mainroot)+1:end);
+p1=[mainroot, roiname];
+p2=[newroot, roiname];
+%p2=spm_select(inf,'image','Choose an exclusion roi','',pwd,'.*',1); %% not sure why you need this special filter instead of swrf*.img, but you do
+
+oldfile = spm_vol(p1);
+newfile = spm_vol(p2);
+
+old=spm_read_vols(oldfile);
+new=spm_read_vols(newfile);
+
+oldnum=sum(sum(sum(old)));
+newnum=sum(sum(sum(new)));
+
+oldminusnew=old-new;
+oldminusnew=oldminusnew>0;
+oldminusnew=sum(sum(sum(oldminusnew)));
+oldminusnewratio=oldminusnewratio+oldminusnew/oldnum;
+newminusold=new-old;
+newminusold=newminusold>0;
+newminusold=sum(sum(sum(newminusold)));
+newminusoldratio=newminusoldratio+newminusold/newnum;
+newminusold_all(s)=newminusold_all(s)+newminusold;
+oldminusnew_all(s)=oldminusnew_all(s)+oldminusnew;
+roicount=roicount+1;
+if oldminusnew>0 || newminusold>0
+display(subject)
+display(roiname)
+printstring=['old: ', num2str(oldnum), ' voxels, ', num2str(oldminusnew), '  unique'];
+otherstring=['new: ', num2str(newnum), ' voxels, ', num2str(newminusold), '  unique'];
+display(printstring)
+display(otherstring)
+end
+catch 
+ printstring=['oops:', subject, '_,', roiname]
+end
+clear oldfile newfile old new oldnum newnum oldminusnew newminusold printstring otherstring
+end
+newminusold_all(s)=newminusold_all(s)/roicount;
+oldminusnew_all(s)=oldminusnew_all(s)/roicount;
+oldratio=oldminusnewratio/roicount;
+newratio=newminusoldratio/roicount;
+avgratio=(oldratio+newratio)/2;
+output(s).ID=subject;
+output(s).newminusold=newminusold_all(s);
+output(s).oldminusnew=oldminusnew_all(s);
+newminusoldarray=[newminusoldarray;newminusold_all(s)];
+oldminusnewarray=[oldminusnewarray;oldminusnew_all(s)];
+oldminusnewratioarray=[oldminusnewratioarray; oldratio]
+newminusoldratioarray=[newminusoldratioarray; newratio];
+avgratioarray=[avgratioarray; avgratio];
+end
+end

@@ -1,0 +1,70 @@
+function report=getroiinfo(study, subjectlist)
+rois={'rFFA', 'lFFA', 'rOFA', 'lOFA', 'rSTS', 'lSTS', 'RTPJ', 'LTPJ', 'PC', 'RSTS', 'LSTS', 'VMPFC', 'MMPFC', 'DMPFC'};
+numrois=length(rois)
+olddirrois={'RTPJ', 'LTPJ', 'PC', 'RSTS', 'LSTS', 'VMPFC', 'MMPFC', 'DMPFC'};
+olddir='autoROI_old';
+newdirrois={'rFFA', 'lFFA', 'rOFA', 'lOFA', 'rSTS', 'lSTS'};
+newdir='autoROI';
+rootdir='/mindhive/saxelab2/'
+studydir=[rootdir, study, '/']
+numsubjs=length(subjectlist);
+for r=1:numrois
+    report(r).name=rois{r};
+    report(r).numvoxels=zeros(numsubjs,1);
+    report(r).peakT=zeros(numsubjs,1);
+    report(r).peakXYZ=zeros(numsubjs,3);
+    report(r).subjectlist=[];
+    report(r).=[];
+end
+for s=1:numsubjs
+    subject=subjectlist{s}
+    
+    report(r).subjectlist=[report(r).subjectlist; subject];
+    subjectdir=[studydir, subject, '/']
+    files=dir([subjectdir, olddir]); %check if this subject has an olddir, if not assume everything is in newdir
+    thisnewdir=newdir;
+    if length(files)==0
+        thisolddir=newdir;
+    else
+        thisolddir=olddir;
+    end
+    for r=1:numrois
+       roi=rois{r}
+       if sum(ismember(olddirrois,roi))
+           currdir=thisolddir;
+       else if sum(ismember(newdirrois,roi))
+           currdir=thisnewdir;
+       else
+           warning=['no directory specified for ', roi]
+           end
+       end
+       desiredroi=[subjectdir, currdir, '/*', roi, '*.mat']
+       files=dir(desiredroi)
+       if length(files)>1
+           warning=['muliple roi matches for ', roi, ' for subject ', subject]
+           report(r).numvoxels(s)=NaN;
+           report(r).peakT(s)=NaN;
+           report(r).peakXYZ(s,1)=NaN;
+           report(r).peakXYZ(s,2)=NaN;
+           report(r).peakXYZ(s,3)=NaN;
+       else if length(files)<1
+           warning=['no roi matches for ', roi, ' for subject ', subject]
+           report(r).numvoxels(s)=NaN;
+           report(r).peakT(s)=NaN;
+           report(r).peakXYZ(s,1)=NaN;
+           report(r).peakXYZ(s,2)=NaN;
+           report(r).peakXYZ(s,3)=NaN;
+       else
+       file=files(1).name
+       mat=load([subjectdir, currdir, '/', file])
+       report(r).numvoxels(s)=mat.n_vox;
+       report(r).peakT(s)=mat.peak_T;
+       report(r).peakXYZ(s,1)=mat.peak_xyz_mm(1);
+       report(r).peakXYZ(s,2)=mat.peak_xyz_mm(2);
+       report(r).peakXYZ(s,3)=mat.peak_xyz_mm(3);
+           end
+       end
+    end 
+end
+save([studydir, 'roi_report.mat']
+end

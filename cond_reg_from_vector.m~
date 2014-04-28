@@ -1,0 +1,205 @@
+function cond_reg_from_vector(study,subjectlist,task,filekey,varargin)
+%e.g. cond_reg_from_vector('FSF',makeIDs('FSF',[1])),'FSF_main','FSFuserregs')
+%e.g. cond_reg_from_vector('FSF',makeIDs('FSF',[1])),'FSF_main','FSFuserregs', 'subset', {'me', 'so', 'ph'})
+
+%AES 12/5/13
+% This function loads data from a .mat files (specified by filekey) and makes it into spm_input style regressors.
+% option to include parametric modulator & full vector "aes_regressor" (to
+% facilitate mvpa analysis down the road)
+add_aes_regressors=0; %adds aes_regressor vector (not used by spm analyses)
+destroy_spm_inputs=1; %desroys existing spm_inputs
+clearconsanddontfixthem=1; %usually 0, but if you want to kill the contrasts for parametric and add your own with saxe_create_con.m, put to 1
+add_param_modulator=1; %adds parametric modulation
+contig_events=0; %if 1, assumes contiguous "on" timepoints make up an event. if 0, instead counts each
+    % timepoint as an independent event... contig_events is set to 0, binarization threshold is set
+    % to 0 (when making binary regs in dealwithSQLdata.py), and
+    % add_param_modulation set to 1, you'll get parametric regressor for
+    % full timecourse
+    
+%% Load and modify behavioral .mat files 
+EXPERIMENT_ROOT_DIR = '/mindhive/saxelab2';
+cd(fullfile(EXPERIMENT_ROOT_DIR,study,'behavioural'));
+
+for subj=1:length(subjectlist)
+    subject=subjectlist{subj}
+    runlist=listbolds(task, {subject}, 'FSF');
+    runlist=runlist{1}
+    file_list=dir(sprintf('%s.%s.*',subject,task));
+    num_runs = length(file_list);
+    if num_runs~=length(runlist)
+        disp('warning: specified runs do not match number of behavioral files');
+    end
+for ii = 1:num_runs
+    thisbold = runlist(ii);
+    cd(fullfile(EXPERIMENT_ROOT_DIR,study,subject,sprintf('bold/0%.2d',thisbold)));
+    reg_file = dir([filekey '.mat']); 
+    load(reg_file.name);%%contains structure with name and reg fields
+    cd(fullfile(EXPERIMENT_ROOT_DIR,study,'behavioural'));
+    load(file_list(ii).name);
+    clear aes_regressors;
+    if destroy_spm_inputs
+        clear spm_inputs;
+        startiter=0;
+    else
+        startiter=size(spm_inputs,2);
+    end
+    if varargin(1)=='subset'
+        subset=varargin(2);
+    else
+        for r=1:size(reg_data,2)
+            subset{r}=reg_data(r).name; %if no subset provided, take all conditions
+        end
+    end
+    condlist={}
+    count=0;
+    for r=1:size(reg_data,2)
+        regressorname=reg_data(r).name;
+    if ismember(regressorname,subset)
+        
+        binregressor=reg_data(r).binreg;
+        parregressor=reg_data(r).parreg;
+        rgrsr_length = length(binregressor);
+        if rgrsr_length ~= ips
+        disp('warning: Number of Regressor rows does not match');
+        fprintf('the ips found in task %s for subject %s\n',task,subject);
+        cont = 'empty';
+        while isempty(strfind('yn',cont))
+            cont = input('Continue? (y/n): ','s');
+        end
+        if cont=='n'
+            disp('aborting...');
+            return
+        end
+    end
+    % make spm events
+    if contig_events==1
+    [onsets,durations,params]=makelongevents(binregressor,parregressor,add_param_modulator);
+    else
+    [onsets,durations,params]=makeTRevents(binregressor,parregressor,add_param_modulator);
+    end
+    if length(onsets)>0
+        spm_inputs(startiter+r).name=regressorname;
+        spm_inputs(startiter+r).ons=onsets';
+        spm_inputs(startiter+r).dur=durations';
+    else
+        spm_inputs(startiter+r).name=regressorname;
+        spm_inputs(startiter+r).ons=[0];
+        spm_inputs(startiter+r).dur=[0];
+    end
+    if add_param_modulator==1 %adds parametric modulation based on the mean of the continuous rating over the event timeperiod
+        spm_inputs(startiter+r).pmod.name='extremity';
+        spm_inputs(startiter+r).pmod.param=params';
+        spm_inputs(startiter+r).pmod.poly=1;
+    end
+    % add each regressor as continuous regressor
+    aes_regressors(r).name = regressorname;
+    aes_regressors(r).binvals = binregressor;
+    aes_regressors(r).parvals = parregressor;
+    end
+    end
+    if add_aes_regressors==0
+        if clearconsanddontfixthem==1
+        con_info='make your own contrasts'
+        save(file_list(ii).name,'-append','spm_inputs', 'con_info');
+        else
+        save(file_list(ii).name,'-append','spm_inputs');
+        fprintf('"aes_regressors" variable appended to file %s\n',file_list(ii).name);
+        end
+    else if add_aes_regressors==1
+        if clearconsanddontfixthem==1
+        con_info='make your own contrasts'
+        save(file_list(ii).name,'-append','spm_inputs','aes_regressors', 'con_info');
+        else
+        save(file_list(ii).name,'-append','spm_inputs','aes_regressors');
+        fprintf('"aes_regressors" variable appended to file %s\n',file_list(ii).name);
+        end
+        end
+    end
+    
+end
+clearvars -except task study subjectlist filekey varargin EXPERIMENT_ROOT_DIR clearconsanddontfixthem add_aes_regressors destroy_spm_inputs add_param_modulator contig_events
+end
+%add contrasts: note this only works if the conditions are ordered as
+%describe below (not true for mushed)!!!! just do this as a second
+%interactive step, making sure the conditionlist is correct
+%note conditions ordered based on condlist in FSF_make_regs
+%condlist={'me', 'so', 'ph', 'fa', 'ob', 'sc','po','ne'}
+% if add_param_modulator==0
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'ME>PH', [1:8], [1,0,-1,0,0,0,0,0], 'clearexisting')
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'ME>SO', [1:8], [1,-1,0,0,0,0,0,0])
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'ME+SO>PH', [1:8], [1,1,-2,0,0,0,0,0])
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'ME>OB+SC', [1:8], [2,0,0,0,-1,-1,0,0])
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'FA>OB', [1:8], [0,0,0,1,-1,0,0,0])
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'FA>SC+OB', [1:8], [0,0,0,2,-1,-1,0,0])
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'SC>FA+OB', [1:8], [0,0,0,-1,-1,2,0,0])
+% else if add_param_modulator==1
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'ME>PH', [1:8], [1,1,0,0,-1,-1,0,0,0,0,0,0,0,0,0,0], 'clearexisting')
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'ME>SO', [1:8], [1,1,-1,-1,0,0,0,0,0,0,0,0,0,0,0,0])
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'ME+SO>PH', [1:8], [1,1,1,1,-2,-2,0,0,0,0,0,0,0,0,0,0])
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'ME>OB+SC', [1:8], [2,2,0,0,0,0,0,-1,-1,-1,-1,0,0,0,0,0])
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'FA>OB', [1:8], [0,0,0,0,0,0,1,1,-1,-1,0,0,0,0,0,0])
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'FA>SC+OB', [1:8], [0,0,0,0,0,0,2,2,-1,-1,-1,-1,0,0,0,0])
+% add_contrast_to_behav_amy('FSF', 'FSF_main', subjectlist, 'SC>FA+OB', [1:8], [0,0,0,0,0,0,-1,-1,2,2,0,0,0,0,0,0])
+%             
+% end
+% 
+% end
+end
+
+function [ons,dur,param]=makelongevents(reg,paramreg,parammod)
+ons=[];
+dur=[];
+param=[];
+on=0;
+for i=1:length(reg)
+    val=reg(i);
+    if val==1 & on==0
+      ons=[ons,i];
+      onset=i;
+      on=1;
+    else if val==0 & on==1
+      offset=i;
+      dur=[dur,offset-onset];
+      if parammod
+      p=paramreg(onset:offset-1);
+      meanparam=mean(p);
+      param=[param,meanparam];
+      end
+      on=0;
+    end
+    end
+end
+if length(ons) ~=length(dur)
+    'length mismatch!'
+end
+if length(ons)==0
+    'no ons!'
+end
+end
+function [ons,dur,param]=makeTRevents(reg,paramreg,parammod)
+ons=[];
+dur=[];
+param=[];
+for i=1:length(reg)
+    val=reg(i);
+    if parammod==0 %if not using parametric modulation but just want single timepoint events, only count as an event if val==1
+        if val==1
+            ons=[ons,i];
+            dur=[dur,1];
+        end
+    else %if using parametric modulation, just use the whole timecourse
+        ons=[ons,i];
+        dur=[dur,1];
+        if parammod
+        p=paramreg(i);
+        param=[param,p];
+        end
+    end
+end
+if length(ons) ~=length(dur)
+    'length mismatch!'
+end
+if length(ons)==0
+    'no ons!'
+end
+end
